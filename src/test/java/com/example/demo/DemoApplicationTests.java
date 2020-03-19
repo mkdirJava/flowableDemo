@@ -39,6 +39,24 @@ class DemoApplicationTests {
             this.runtimeService.deleteProcessInstance(processInstance.getId(), "clean up after each test");
         });
     }
+    @Test
+    void I_SHOULD_BE_ABLE_TO_PROGRESS_WITHOUT_AN_INVESTIGATION(){
+        //create new process
+        ProcessInstance createdProcessInstance = createProcessInstance();
+        testOneSafetyOfficeTaskCreated();
+
+        //complete safety office task with no investigation
+        Task safetyOfficeTask = this.taskService.createTaskQuery().singleResult();
+        runtimeService.setVariableLocal(safetyOfficeTask.getExecutionId(),"shouldWaitInvestigations","false");
+        this.taskService.complete(safetyOfficeTask.getId());
+
+        //assert only downstream task is available
+        List<Task> totalTasks = this.taskService.createTaskQuery().list();
+        assertTrue("There should only be one task ", totalTasks.size() == 1);
+        assertTrue("The task should be DownStream", totalTasks.get(0).getName().equals("DownStream"));
+
+
+    }
 
     @Test
     void I_SHOULD_BE_ABLE_TO_RAISE_INVESTIGATION_TASKS_AND_HAVE_A_SAFETY_OFFICE_TASK_OPEN_AT_ONE_TIME() {
@@ -88,6 +106,7 @@ class DemoApplicationTests {
 
 
         //complete the safety office task and check there is still two investigations going on
+        runtimeService.setVariableLocal(safetyOffice.getExecutionId(),"shouldWaitInvestigations","true");
         this.taskService.complete(safetyOffice.getId());
         List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
         Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
@@ -116,6 +135,7 @@ class DemoApplicationTests {
         assertTrue("There should be two investigation task ", tasksByName.get("Investigation").size() == 2);
 
         // complete the safety office task and check there are two investigations tasks and no DownStream tasks
+        runtimeService.setVariableLocal(safetyOffice.getExecutionId(),"shouldWaitInvestigations","true");
         this.taskService.complete(safetyOffice.getId());
         List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
         Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
