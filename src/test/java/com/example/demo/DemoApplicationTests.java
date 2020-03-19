@@ -50,11 +50,9 @@ class DemoApplicationTests {
         runtimeService.setVariableLocal(safetyOfficeTask.getExecutionId(),"shouldWaitInvestigations","false");
         this.taskService.complete(safetyOfficeTask.getId());
 
-        //assert only downstream task is available
+        //assert no more tasks to be completed
         List<Task> totalTasks = this.taskService.createTaskQuery().list();
-        assertTrue("There should only be one task ", totalTasks.size() == 1);
-        assertTrue("The task should be DownStream", totalTasks.get(0).getName().equals("DownStream"));
-
+        assertTrue("There should only be one task ", totalTasks.size() == 0);
 
     }
 
@@ -80,9 +78,13 @@ class DemoApplicationTests {
         raiseInvestigation(createdProcessInstance);
         raiseInvestigation(createdProcessInstance);
 
+        //Assert there are two investigations and one safety office task.
         List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
         assertTrue("There should be a safety office and investigation tasks created ", tasksAfterSignalForInvestigation.size() == 3);
-        assertTrue("There be one processes running" , this.runtimeService.createProcessInstanceQuery().list().size() ==1);
+        Map<String, List<Task>> groupByTaskName = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should be two investigations",groupByTaskName.get("Investigation").size() ==2);
+        assertTrue("There should be one Safety Office task",groupByTaskName.get("Safety Office").size() ==1);
+
     }
 
     @Test
@@ -93,7 +95,6 @@ class DemoApplicationTests {
         // list out the initial tasks
         testOneSafetyOfficeTaskCreated();
         Task safetyOffice = this.taskService.createTaskQuery().singleResult();
-
 
         //raise two investigations that are concurrent  with the safety office task
         raiseInvestigation(createdProcessInstance);
@@ -111,13 +112,13 @@ class DemoApplicationTests {
         List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
         Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
         assertTrue("There should not be any safety office task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office"));
-        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("DownStream"));
+        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office Review"));
         assertTrue("There should be two investigation task ", tasksByNameAfterSafetyOfficeTaskComplete.get("Investigation").size() == 2 );
 
     }
 
     @Test
-    void I_NEED_TO_COMPLETE_ALL_INVESTIGATION_AND_SAFETY_OFFICE_TASKS_BEFORE_GETTING_TO_DOWNSTREAM_TASK(){
+    void I_NEED_TO_COMPLETE_ALL_INVESTIGATION_AND_SAFETY_OFFICE_TASKS_BEFORE_GETTING_TO_SAFETY_OFFICE_TASK(){
         //Create a new process instance
         ProcessInstance createdProcessInstance = createProcessInstance();
 
@@ -134,28 +135,122 @@ class DemoApplicationTests {
         assertTrue("There should be one safety office task ", tasksByName.get("Safety Office").size() == 1);
         assertTrue("There should be two investigation task ", tasksByName.get("Investigation").size() == 2);
 
-        // complete the safety office task and check there are two investigations tasks and no DownStream tasks
+        // complete the safety office task and check there are two investigations tasks and no Safety Office Review tasks
         runtimeService.setVariableLocal(safetyOffice.getExecutionId(),"shouldWaitInvestigations","true");
         this.taskService.complete(safetyOffice.getId());
         List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
         Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
         assertTrue("There should not be any safety office task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office"));
-        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("DownStream"));
+        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office Review"));
         assertTrue("There should be two investigation task ", tasksByNameAfterSafetyOfficeTaskComplete.get("Investigation").size() == 2 );
 
-        //Complete remaining investigation tasks which should cause the downstream task to appear
+        //Complete remaining investigation tasks which should cause the Safety Office Review task to appear
         tasksAfterSignalForInvestigation.stream().filter(task -> task.getName().equals("Investigation")).forEach(investigationTask -> this.taskService.complete(investigationTask.getId()));
         List<Task> tasksAfterCompletingSafetyOfficeAndInvestigations = this.taskService.createTaskQuery().list();
         Map<String, List<Task>> endTaskNames = tasksAfterCompletingSafetyOfficeAndInvestigations.stream().collect(Collectors.groupingBy(TaskInfo::getName));
-        assertTrue("There should be one DownStream task ", endTaskNames.get("DownStream").size() == 1);
+        assertTrue("There should be one Safety Office Review task ", endTaskNames.get("Safety Office Review").size() == 1);
         assertTrue("There should be no investigation task ", !endTaskNames.containsKey("Investigation"));
         assertTrue("There should be no safety task ", !endTaskNames.containsKey("Safety Office"));
 
-        //complete the downstream task
+        //complete the Safety Office Review task
         List<Task> endTaskList = this.taskService.createTaskQuery().list();
         assertTrue("There is one task left", endTaskList.size() == 1);
-        assertTrue("task left is called DownStream", endTaskList.get(0).getName().equals("DownStream"));
+        assertTrue("task left is called Safety Office Review", endTaskList.get(0).getName().equals("Safety Office Review"));
+
+    }
+
+    @Test
+    void I_CAN_RE_ENTER_SAFTEY_OFFICE_AFTER_FINISHING_A_REVIEW(){
+        //Create a new process instance
+        ProcessInstance createdProcessInstance = createProcessInstance();
+
+        //test that one safety office is created
+        testOneSafetyOfficeTaskCreated();
+        Task safetyOffice = this.taskService.createTaskQuery().singleResult();
+
+        // raise two investigations and test that there are three tasks, one safety office
+        raiseInvestigation(createdProcessInstance);
+        raiseInvestigation(createdProcessInstance);
+        List<Task> tasksAfterTwoInvestigationSignals = this.taskService.createTaskQuery().list();
+        assertTrue("There should be three tasks", tasksAfterTwoInvestigationSignals.size() == 3);
+        Map<String, List<Task>> tasksByName = tasksAfterTwoInvestigationSignals.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should be one safety office task ", tasksByName.get("Safety Office").size() == 1);
+        assertTrue("There should be two investigation task ", tasksByName.get("Investigation").size() == 2);
+
+        // complete the safety office task and check there are two investigations tasks and no Safety Office Review tasks
+        runtimeService.setVariableLocal(safetyOffice.getExecutionId(),"shouldWaitInvestigations","true");
+        this.taskService.complete(safetyOffice.getId());
+        List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
+        Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should not be any safety office task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office"));
+        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office Review"));
+        assertTrue("There should be two investigation task ", tasksByNameAfterSafetyOfficeTaskComplete.get("Investigation").size() == 2 );
+
+        //Complete remaining investigation tasks which should cause the Safety Office Review task to appear
+        tasksAfterSignalForInvestigation.stream().filter(task -> task.getName().equals("Investigation")).forEach(investigationTask -> this.taskService.complete(investigationTask.getId()));
+        List<Task> tasksAfterCompletingSafetyOfficeAndInvestigations = this.taskService.createTaskQuery().list();
+        Map<String, List<Task>> endTaskNames = tasksAfterCompletingSafetyOfficeAndInvestigations.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should be one Safety Office Review task ", endTaskNames.get("Safety Office Review").size() == 1);
+        assertTrue("There should be no investigation task ", !endTaskNames.containsKey("Investigation"));
+        assertTrue("There should be no safety task ", !endTaskNames.containsKey("Safety Office"));
+
+        //complete the Safety Office Review task
+        List<Task> endTaskList = this.taskService.createTaskQuery().list();
+        assertTrue("There is one task left", endTaskList.size() == 1);
+        assertTrue("task left is called Safety Office Review", endTaskList.get(0).getName().equals("Safety Office Review"));
+        this.runtimeService.setVariableLocal(endTaskList.get(0).getExecutionId(),"isSafetyOfficeFinished","false");
         this.taskService.complete(endTaskList.get(0).getId());
+
+        List<Task> restartTaskList = this.taskService.createTaskQuery().list();
+        assertTrue("There should be one task left ", restartTaskList.size() == 1);
+        assertTrue("The task should be Safety Office", restartTaskList.get(0).getName().equals("Safety Office"));
+
+    }
+
+    @Test
+    void I_CAN_FINISH_THE_TASKS_AND_REACH_THE_END(){
+        //Create a new process instance
+        ProcessInstance createdProcessInstance = createProcessInstance();
+
+        //test that one safety office is created
+        testOneSafetyOfficeTaskCreated();
+        Task safetyOffice = this.taskService.createTaskQuery().singleResult();
+
+        // raise two investigations and test that there are three tasks, one safety office
+        raiseInvestigation(createdProcessInstance);
+        raiseInvestigation(createdProcessInstance);
+        List<Task> tasksAfterTwoInvestigationSignals = this.taskService.createTaskQuery().list();
+        assertTrue("There should be three tasks", tasksAfterTwoInvestigationSignals.size() == 3);
+        Map<String, List<Task>> tasksByName = tasksAfterTwoInvestigationSignals.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should be one safety office task ", tasksByName.get("Safety Office").size() == 1);
+        assertTrue("There should be two investigation task ", tasksByName.get("Investigation").size() == 2);
+
+        // complete the safety office task and check there are two investigations tasks and no Safety Office Review tasks
+        runtimeService.setVariableLocal(safetyOffice.getExecutionId(),"shouldWaitInvestigations","true");
+        this.taskService.complete(safetyOffice.getId());
+        List<Task> tasksAfterSignalForInvestigation = this.taskService.createTaskQuery().list();
+        Map<String, List<Task>> tasksByNameAfterSafetyOfficeTaskComplete = tasksAfterSignalForInvestigation.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should not be any safety office task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office"));
+        assertTrue("There should not be any Down stream task ", !tasksByNameAfterSafetyOfficeTaskComplete.containsKey("Safety Office Review"));
+        assertTrue("There should be two investigation task ", tasksByNameAfterSafetyOfficeTaskComplete.get("Investigation").size() == 2 );
+
+        //Complete remaining investigation tasks which should cause the Safety Office Review task to appear
+        tasksAfterSignalForInvestigation.stream().filter(task -> task.getName().equals("Investigation")).forEach(investigationTask -> this.taskService.complete(investigationTask.getId()));
+        List<Task> tasksAfterCompletingSafetyOfficeAndInvestigations = this.taskService.createTaskQuery().list();
+        Map<String, List<Task>> endTaskNames = tasksAfterCompletingSafetyOfficeAndInvestigations.stream().collect(Collectors.groupingBy(TaskInfo::getName));
+        assertTrue("There should be one Safety Office Review task ", endTaskNames.get("Safety Office Review").size() == 1);
+        assertTrue("There should be no investigation task ", !endTaskNames.containsKey("Investigation"));
+        assertTrue("There should be no safety task ", !endTaskNames.containsKey("Safety Office"));
+
+        //complete the Safety Office Review task
+        List<Task> endTaskList = this.taskService.createTaskQuery().list();
+        assertTrue("There is one task left", endTaskList.size() == 1);
+        assertTrue("task left is called Safety Office Review", endTaskList.get(0).getName().equals("Safety Office Review"));
+        this.runtimeService.setVariableLocal(endTaskList.get(0).getExecutionId(),"isSafetyOfficeFinished","true");
+        this.taskService.complete(endTaskList.get(0).getId());
+
+        List<Task> restartTaskList = this.taskService.createTaskQuery().list();
+        assertTrue("There should be no more tasks left", restartTaskList.size() == 0);
 
     }
 
