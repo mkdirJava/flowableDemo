@@ -1,5 +1,8 @@
 package com.example.demo.bpnm.service.node;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.FlowElement;
@@ -53,50 +56,57 @@ public class UserNodeService implements IGetBpnmModel {
 			return userNode;
 		} else {
 			if (nextFlowElement instanceof UserTask) {
-				UserTask userTask = (UserTask) nextFlowElement;
-				UserNode userNode = new UserNode(userTask.getId(), userTask.getName(), previousFoundUserNode);
+				UserNode userNode = new UserNode(nextFlowElement.getId(), nextFlowElement.getName(),
+						previousFoundUserNode);
 
-				if (userNode.isCyclic(userTask)) {
+				if (userNode.getPreviousTask().isCyclic(UserNode.fromFlowElement(nextFlowElement))) {
 					return null;
 				}
-				userTask.getOutgoingFlows().stream().forEach((outFlow) -> {
-					userNode.addToFutureTasks(findNextNode(userNode, outFlow));
+				((UserTask) nextFlowElement).getOutgoingFlows().stream().forEach((outFlow) -> findNextNode(userNode, outFlow));
+
+				((UserTask) nextFlowElement).getBoundaryEvents().stream().forEach((event) -> {
+					userNode.getActionNames().add(event.getName());
+
 				});
 
-				userTask.getBoundaryEvents().stream().forEach((event) -> {
-					userNode.getActionNames().add(event.getName());
-					
-				});
-				
 				return userNode;
 
 			}
 
 			if (nextFlowElement instanceof SequenceFlow) {
-				// TODO handle cyclics
+				System.out.println("I am coming from " + previousFoundUserNode.getUserNodeName() + " I am on  "+ nextFlowElement.getId());
 				SequenceFlow sequenceFlow = (SequenceFlow) nextFlowElement;
-				if (previousFoundUserNode != null) {
-					previousFoundUserNode.addConditionToThisNode(sequenceFlow.getConditionExpression());
-				}
-				if (!previousFoundUserNode.isCyclic(sequenceFlow)) {
-					previousFoundUserNode.addToFutureTasks(findNextNode(previousFoundUserNode, sequenceFlow.getTargetFlowElement()));
+				if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(sequenceFlow))) {
 					return previousFoundUserNode;
 				}
-				return previousFoundUserNode;
+
+				if (previousFoundUserNode != null && sequenceFlow.getConditionExpression() != null) {
+					previousFoundUserNode.addConditionToThisNode(sequenceFlow.getConditionExpression());
+				}
+				return findNextNode(previousFoundUserNode, sequenceFlow.getTargetFlowElement());
+
 			}
 
 			if (nextFlowElement instanceof Gateway) {
 				Gateway gateway = (Gateway) nextFlowElement;
-				// TODO handle cyclics
 
-				gateway.getOutgoingFlows().stream().filter(outflow -> !previousFoundUserNode.isCyclic(outflow))
-						.forEach((outFlow) -> {
-							previousFoundUserNode.addToFutureTasks(findNextNode(previousFoundUserNode, outFlow));
-						});
+				System.out.println("I have hit the gateway " + gateway.getId()+" I am going to search " + gateway.getOutgoingFlows());
+//				gateway.getOutgoingFlows().parallelStream().forEach((outFlow)->{
+//					findNextNode(previousFoundUserNode, outFlow);
+//				});
+				gateway.getOutgoingFlows().stream()
+						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
+								.map((outflow) -> findNextNode(previousFoundUserNode, outflow))
+								.filter(nextNode -> {
+									return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
+								})
+								.forEach((nextNode) -> {
+									previousFoundUserNode.addToFutureTasks(nextNode);
+								});
 				return previousFoundUserNode;
 			}
 			if (nextFlowElement instanceof EndEvent) {
-				return previousFoundUserNode;
+				return null;
 			}
 			throw new IllegalArgumentException("The element is not a sequence, gateway or user task");
 		}

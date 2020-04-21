@@ -23,12 +23,12 @@ public class UserNode {
 		this.userNodeName = userNodeName;
 		this.previousTask = previousTask;
 	}
-	public boolean isCyclic(FlowElement flowElement) {
-		if(this.previousTask != null & flowElement instanceof UserTask) {
-			if(flowElement.getId().equals(this.userNodeId)) {
+	public boolean isCyclic(UserNode userNode) {
+		if(this.previousTask != null) {
+			if(userNode.getUserNodeId().equals(this.userNodeId)) {
 				return true;
 			}else {
-				return this.previousTask.isCyclic(flowElement);
+				return this.previousTask.isCyclic(userNode);
 			}
 		}
 		return false;
@@ -70,5 +70,13 @@ public class UserNode {
 		this.conditionsToGetToThisUserNode.add(condition);
 	}
 	
+	@Override
+	public String toString() {
+		return this.getUserNodeName(); 
+	}
+	
+	public static UserNode fromFlowElement(FlowElement flowElement) {
+		return new UserNode(flowElement.getId(), flowElement.getName(), null);
+	}
 	
 }
