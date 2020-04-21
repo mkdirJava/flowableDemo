@@ -1,8 +1,5 @@
 package com.example.demo.bpnm.service.node;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.FlowElement;
@@ -31,10 +28,10 @@ public class UserNodeService implements IGetBpnmModel {
 
 	@Cacheable("UserNodeModel")
 	@Override
-	public UserNode getUserNodesInModel(Task task) {
-		BpmnModel bpmnModel = repositoryService.getBpmnModel(task.getProcessDefinitionId());
+	public UserNode getUserNodesInModel(String processDefinitionId) {
+		BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
 		ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
-				.processDefinitionId(task.getProcessDefinitionId()).singleResult();
+				.processDefinitionId(processDefinitionId).singleResult();
 		FlowElement startEvent = bpmnModel.getProcessById(processDefinition.getKey()).getFlowElements().stream()
 				.filter(flow -> flow instanceof StartEvent).findFirst().orElseThrow();
 
@@ -74,14 +71,13 @@ public class UserNodeService implements IGetBpnmModel {
 			}
 
 			if (nextFlowElement instanceof SequenceFlow) {
-				System.out.println("I am coming from " + previousFoundUserNode.getUserNodeName() + " I am on  "+ nextFlowElement.getId());
 				SequenceFlow sequenceFlow = (SequenceFlow) nextFlowElement;
 				if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(sequenceFlow))) {
 					return previousFoundUserNode;
 				}
 
 				if (previousFoundUserNode != null && sequenceFlow.getConditionExpression() != null) {
-					previousFoundUserNode.addConditionToThisNode(sequenceFlow.getConditionExpression());
+					previousFoundUserNode.addOngoingConditions(sequenceFlow.getConditionExpression());
 				}
 				return findNextNode(previousFoundUserNode, sequenceFlow.getTargetFlowElement());
 
@@ -90,10 +86,6 @@ public class UserNodeService implements IGetBpnmModel {
 			if (nextFlowElement instanceof Gateway) {
 				Gateway gateway = (Gateway) nextFlowElement;
 
-				System.out.println("I have hit the gateway " + gateway.getId()+" I am going to search " + gateway.getOutgoingFlows());
-//				gateway.getOutgoingFlows().parallelStream().forEach((outFlow)->{
-//					findNextNode(previousFoundUserNode, outFlow);
-//				});
 				gateway.getOutgoingFlows().stream()
 						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
 								.map((outflow) -> findNextNode(previousFoundUserNode, outflow))

@@ -13,7 +13,7 @@ public class UserNode {
 	private UserNode previousTask;
 	private List<UserNode> futureTasks = new ArrayList<UserNode>();
 	
-	private List<String> conditionsToGetToThisUserNode = new ArrayList<String>();
+	private List<String> ongoingConditions = new ArrayList<String>();
 	
 	private List<String> actionNames = new ArrayList<String>();
 	
@@ -63,11 +63,11 @@ public class UserNode {
 	public synchronized void addToFutureTasks(UserNode userNode) {
 		this.futureTasks.add(userNode);
 	}
-	public synchronized List<String> getConditionsToGetToThisUserNode() {
-		return conditionsToGetToThisUserNode;
+	public synchronized List<String> getOngoingConditions() {
+		return ongoingConditions;
 	}
-	public synchronized void addConditionToThisNode(String condition) {
-		this.conditionsToGetToThisUserNode.add(condition);
+	public synchronized void addOngoingConditions(String condition) {
+		this.ongoingConditions.add(condition);
 	}
 	
 	@Override

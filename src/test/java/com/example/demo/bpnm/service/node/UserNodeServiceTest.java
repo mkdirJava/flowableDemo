@@ -36,7 +36,8 @@ class UserNodeServiceTest {
 	void test() {
 		createProcessInstance();
 		Task activeTask = this.taskService.createTaskQuery().singleResult();
-		UserNode userNodesInModel = this.userNodeService.getUserNodesInModel(activeTask);
+		
+		UserNode userNodesInModel = this.userNodeService.getUserNodesInModel(activeTask.getProcessDefinitionId());
 		
 		
 		
