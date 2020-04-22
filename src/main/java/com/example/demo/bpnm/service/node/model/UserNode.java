@@ -13,15 +13,24 @@ public class UserNode {
 	private UserNode previousTask;
 	private List<UserNode> futureTasks = new ArrayList<UserNode>();
 	
-	private List<String> ongoingConditions = new ArrayList<String>();
+	private List<String> conditionsToArrive = new ArrayList<String>();
 	
 	private List<String> actionNames = new ArrayList<String>();
 	
-	public UserNode(String userNodeId, String userNodeName, UserNode previousTask) {
+	public UserNode(String userNodeId, String userNodeName, SearchContext context) {
 		super();
 		this.userNodeId = userNodeId;
 		this.userNodeName = userNodeName;
-		this.previousTask = previousTask;
+		if( context != null && context.getOriginUserNode() != null) {
+			this.previousTask = context.getOriginUserNode();
+			this.conditionsToArrive = context.getFoundOutflowConditions();	
+		}
+		
+	}
+	public UserNode(String userNodeId, String userNodeName) {
+		super();
+		this.userNodeId = userNodeId;
+		this.userNodeName = userNodeName;
 	}
 	public boolean isCyclic(UserNode userNode) {
 		if(this.previousTask != null) {
@@ -63,11 +72,8 @@ public class UserNode {
 	public synchronized void addToFutureTasks(UserNode userNode) {
 		this.futureTasks.add(userNode);
 	}
-	public synchronized List<String> getOngoingConditions() {
-		return ongoingConditions;
-	}
-	public synchronized void addOngoingConditions(String condition) {
-		this.ongoingConditions.add(condition);
+	public synchronized List<String> getConditionsToArrive() {
+		return conditionsToArrive;
 	}
 	
 	@Override
@@ -76,7 +82,7 @@ public class UserNode {
 	}
 	
 	public static UserNode fromFlowElement(FlowElement flowElement) {
-		return new UserNode(flowElement.getId(), flowElement.getName(), null);
+		return new UserNode(flowElement.getId(), flowElement.getName());
 	}
 	
 }

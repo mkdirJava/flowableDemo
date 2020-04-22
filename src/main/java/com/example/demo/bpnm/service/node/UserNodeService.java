@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
+import com.example.demo.bpnm.service.node.model.SearchContext;
 import com.example.demo.bpnm.service.node.model.UserNode;
 
 @Component
@@ -35,73 +36,72 @@ public class UserNodeService implements IGetBpnmModel {
 		FlowElement startEvent = bpmnModel.getProcessById(processDefinition.getKey()).getFlowElements().stream()
 				.filter(flow -> flow instanceof StartEvent).findFirst().orElseThrow();
 
-		return findNextNode(null, startEvent);
+		return findNextNode(new SearchContext(UserNode.fromFlowElement(startEvent)), startEvent);
 	}
 
-	private UserNode findNextNode(UserNode previousFoundUserNode, FlowElement nextFlowElement) {
+	private UserNode findNextNode(SearchContext searchContext, FlowElement nextFlowElement) {
 
-		if (nextFlowElement instanceof StartEvent == false & previousFoundUserNode == null) {
+		if (nextFlowElement instanceof StartEvent == false & searchContext == null) {
 			throw new IllegalArgumentException("argument is not a start event");
 		}
 
-		if (previousFoundUserNode == null) {
+		if (nextFlowElement instanceof StartEvent) {
 			StartEvent startEvent = (StartEvent) nextFlowElement;
-			UserNode userNode = new UserNode(startEvent.getId(), startEvent.getName(), previousFoundUserNode);
+			UserNode userNode = new UserNode(startEvent.getId(), startEvent.getName(), searchContext);
 			startEvent.getOutgoingFlows().stream().forEach((outflow) -> {
-				userNode.addToFutureTasks(findNextNode(userNode, outflow));
+				userNode.addToFutureTasks(findNextNode(new SearchContext(userNode), outflow));
 			});
 			return userNode;
-		} else {
-			if (nextFlowElement instanceof UserTask) {
-				UserNode userNode = new UserNode(nextFlowElement.getId(), nextFlowElement.getName(),
-						previousFoundUserNode);
+		}
 
-				if (userNode.getPreviousTask().isCyclic(UserNode.fromFlowElement(nextFlowElement))) {
-					return null;
-				}
-				((UserTask) nextFlowElement).getOutgoingFlows().stream().forEach((outFlow) -> findNextNode(userNode, outFlow));
+		if (nextFlowElement instanceof UserTask) {
 
-				((UserTask) nextFlowElement).getBoundaryEvents().stream().forEach((event) -> {
-					userNode.getActionNames().add(event.getName());
+			UserNode userNode = new UserNode(nextFlowElement.getId(), nextFlowElement.getName(), searchContext);
 
-				});
-
-				return userNode;
-
-			}
-
-			if (nextFlowElement instanceof SequenceFlow) {
-				SequenceFlow sequenceFlow = (SequenceFlow) nextFlowElement;
-				if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(sequenceFlow))) {
-					return previousFoundUserNode;
-				}
-
-				if (previousFoundUserNode != null && sequenceFlow.getConditionExpression() != null) {
-					previousFoundUserNode.addOngoingConditions(sequenceFlow.getConditionExpression());
-				}
-				return findNextNode(previousFoundUserNode, sequenceFlow.getTargetFlowElement());
-
-			}
-
-			if (nextFlowElement instanceof Gateway) {
-				Gateway gateway = (Gateway) nextFlowElement;
-
-				gateway.getOutgoingFlows().stream()
-						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
-								.map((outflow) -> findNextNode(previousFoundUserNode, outflow))
-								.filter(nextNode -> {
-									return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
-								})
-								.forEach((nextNode) -> {
-									previousFoundUserNode.addToFutureTasks(nextNode);
-								});
-				return previousFoundUserNode;
-			}
-			if (nextFlowElement instanceof EndEvent) {
+			if (userNode.getPreviousTask().isCyclic(UserNode.fromFlowElement(nextFlowElement))) {
 				return null;
 			}
-			throw new IllegalArgumentException("The element is not a sequence, gateway or user task");
+			((UserTask) nextFlowElement).getOutgoingFlows().stream()
+					.forEach((outFlow) -> findNextNode(new SearchContext(userNode), outFlow));
+
+			((UserTask) nextFlowElement).getBoundaryEvents().stream().forEach((event) -> {
+				userNode.getActionNames().add(event.getName());
+			});
+
+			return userNode;
 		}
+
+		if (nextFlowElement instanceof SequenceFlow) {
+			UserNode previousFoundUserNode = searchContext.getOriginUserNode();
+			SequenceFlow sequenceFlow = (SequenceFlow) nextFlowElement;
+			if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(sequenceFlow))) {
+				return previousFoundUserNode;
+			}
+
+			if (sequenceFlow.getConditionExpression() != null) {
+				searchContext.addOutflowCondition(sequenceFlow.getConditionExpression());
+			}
+			return findNextNode(searchContext, sequenceFlow.getTargetFlowElement());
+
+		}
+
+		if (nextFlowElement instanceof Gateway) {
+			Gateway gateway = (Gateway) nextFlowElement;
+			UserNode previousFoundUserNode = searchContext.getOriginUserNode();
+			gateway.getOutgoingFlows().stream()
+					.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
+					.map((outflow) -> findNextNode(searchContext, outflow))
+					.filter(nextNode -> {
+						return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
+					}).forEach((nextNode) -> {
+						previousFoundUserNode.addToFutureTasks(nextNode);
+					});
+			return previousFoundUserNode;
+		}
+		if (nextFlowElement instanceof EndEvent) {
+			return null;
+		}
+		throw new IllegalArgumentException("The element is not a sequence, gateway or user task it is a " + nextFlowElement.getClass().toString());
 
 	}
 
