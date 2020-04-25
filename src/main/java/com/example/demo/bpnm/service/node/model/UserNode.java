@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.flowable.bpmn.model.FlowElement;
-import org.flowable.bpmn.model.UserTask;
 
 public class UserNode {
 	private String userNodeId;

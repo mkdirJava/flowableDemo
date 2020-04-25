@@ -5,11 +5,11 @@ import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.Gateway;
 import org.flowable.bpmn.model.SequenceFlow;
+import org.flowable.bpmn.model.ServiceTask;
 import org.flowable.bpmn.model.StartEvent;
 import org.flowable.bpmn.model.UserTask;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.ProcessDefinition;
-import org.flowable.task.api.Task;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
@@ -46,12 +46,13 @@ public class UserNodeService implements IGetBpnmModel {
 
 		if (previousFoundUserNode == null) {
 			StartEvent startEvent = (StartEvent) nextFlowElement;
-			UserNode userNode = new UserNode(startEvent.getId(), startEvent.getName(), previousFoundUserNode);
-			startEvent.getOutgoingFlows().stream().forEach((outflow) -> {
-				userNode.addToFutureTasks(findNextNode(userNode, outflow));
-			});
-			return userNode;
+			UserNode startNode = new UserNode(startEvent.getId(), "START EVENT", previousFoundUserNode);
+			startEvent.getOutgoingFlows().stream()
+			.filter(outflow -> !startNode.isCyclic(UserNode.fromFlowElement(outflow)))
+			.forEach((outflow) -> findNextNode(startNode, outflow));
+			return startNode;
 		} else {
+
 			if (nextFlowElement instanceof UserTask) {
 				UserNode userNode = new UserNode(nextFlowElement.getId(), nextFlowElement.getName(),
 						previousFoundUserNode);
@@ -59,14 +60,39 @@ public class UserNodeService implements IGetBpnmModel {
 				if (userNode.getPreviousTask().isCyclic(UserNode.fromFlowElement(nextFlowElement))) {
 					return null;
 				}
-				((UserTask) nextFlowElement).getOutgoingFlows().stream().forEach((outFlow) -> findNextNode(userNode, outFlow));
-
+				UserTask userTask = ((UserTask) nextFlowElement);
+				userTask.getOutgoingFlows().stream()
+						.filter(outflow -> !userNode.isCyclic(UserNode.fromFlowElement(outflow)))
+						.map((outflow) -> findNextNode(userNode, outflow)).filter(nextNode -> {
+							return nextNode != null && !nextNode.isCyclic(nextNode);
+						}).forEach((nextNode) -> {
+							System.out.println(" User Task adding "+ nextNode.getUserNodeName() + " to " + previousFoundUserNode.getUserNodeName());
+							userNode.addToFutureTasks(nextNode);
+						});
 				((UserTask) nextFlowElement).getBoundaryEvents().stream().forEach((event) -> {
 					userNode.getActionNames().add(event.getName());
 
 				});
 
 				return userNode;
+
+			}
+
+			if (nextFlowElement instanceof ServiceTask) {
+				ServiceTask serviceTask = (ServiceTask) nextFlowElement;
+
+//				if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(nextFlowElement))) {
+//					return previousFoundUserNode;
+//				}
+				serviceTask.getOutgoingFlows().stream()
+						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
+						.map((outflow) -> findNextNode(previousFoundUserNode, outflow)).filter(nextNode -> {
+							return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
+						}).forEach((nextNode) -> {
+							System.out.println(" Service Task adding "+ nextNode.getUserNodeName() + " to " + previousFoundUserNode.getUserNodeName());
+							previousFoundUserNode.addToFutureTasks(nextNode);
+						});
+				return previousFoundUserNode;
 
 			}
 
@@ -88,13 +114,12 @@ public class UserNodeService implements IGetBpnmModel {
 
 				gateway.getOutgoingFlows().stream()
 						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
-								.map((outflow) -> findNextNode(previousFoundUserNode, outflow))
-								.filter(nextNode -> {
-									return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
-								})
-								.forEach((nextNode) -> {
-									previousFoundUserNode.addToFutureTasks(nextNode);
-								});
+						.map((outflow) -> findNextNode(previousFoundUserNode, outflow)).filter(nextNode -> {
+							return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
+						}).forEach((nextNode) -> {
+							System.out.println(" Gateway adding "+ nextNode.getUserNodeName() + " to " + previousFoundUserNode.getUserNodeName());
+							previousFoundUserNode.addToFutureTasks(nextNode);
+						});
 				return previousFoundUserNode;
 			}
 			if (nextFlowElement instanceof EndEvent) {
