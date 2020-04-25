@@ -49,7 +49,7 @@ class TaskDefinitionHelperTest {
 	}
 
 	private ProcessInstance createProcessInstance() {
-		ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().singleResult();
+		ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().processDefinitionKey("test").singleResult();
 		return this.runtimeService.startProcessInstanceByKey(processDefinition.getKey());
 	}
     private void raiseInvestigation(ProcessInstance processInstance,String eventName){

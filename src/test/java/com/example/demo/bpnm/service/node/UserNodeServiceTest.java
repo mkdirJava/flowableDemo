@@ -45,7 +45,7 @@ class UserNodeServiceTest {
 	}
 
 	private ProcessInstance createProcessInstance() {
-		ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().singleResult();
+		ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().processDefinitionKey("corrective-action").singleResult();
 		return this.runtimeService.startProcessInstanceByKey(processDefinition.getKey());
 	}
 

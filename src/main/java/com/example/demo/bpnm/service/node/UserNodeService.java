@@ -5,6 +5,7 @@ import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.Gateway;
 import org.flowable.bpmn.model.SequenceFlow;
+import org.flowable.bpmn.model.ServiceTask;
 import org.flowable.bpmn.model.StartEvent;
 import org.flowable.bpmn.model.UserTask;
 import org.flowable.engine.RepositoryService;
@@ -76,6 +77,22 @@ public class UserNodeService implements IGetBpnmModel {
 			SequenceFlow sequenceFlow = (SequenceFlow) nextFlowElement;
 			if (previousFoundUserNode.isCyclic(UserNode.fromFlowElement(sequenceFlow))) {
 				return previousFoundUserNode;
+			}
+
+			if (nextFlowElement instanceof ServiceTask) {
+				ServiceTask serviceTask = (ServiceTask) nextFlowElement;
+
+//				
+				serviceTask.getOutgoingFlows().stream()
+						.filter(outflow -> !previousFoundUserNode.isCyclic(UserNode.fromFlowElement(outflow)))
+						.map((outflow) -> findNextNode(searchContext, outflow)).filter(nextNode -> {
+							return nextNode != null && !previousFoundUserNode.isCyclic(nextNode);
+						}).forEach((nextNode) -> {
+							System.out.println(" Service Task adding "+ nextNode.getUserNodeName() + " to " + previousFoundUserNode.getUserNodeName());
+							previousFoundUserNode.addToFutureTasks(nextNode);
+						});
+				return previousFoundUserNode;
+
 			}
 
 			if (sequenceFlow.getConditionExpression() != null) {

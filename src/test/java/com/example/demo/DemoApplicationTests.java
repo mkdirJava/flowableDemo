@@ -263,9 +263,9 @@ class DemoApplicationTests {
     }
 
     private ProcessInstance createProcessInstance() {
-        ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().singleResult();
-        return this.runtimeService.startProcessInstanceByKey(processDefinition.getKey());
-    }
+		ProcessDefinition processDefinition = this.repositoryService.createProcessDefinitionQuery().processDefinitionKey("test").singleResult();
+		return this.runtimeService.startProcessInstanceByKey(processDefinition.getKey());
+	}
 
     private void raiseInvestigation(ProcessInstance processInstance){
         Execution execution = this.runtimeService.createExecutionQuery()
